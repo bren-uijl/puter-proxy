@@ -2,8 +2,7 @@ from flask import Flask, Response, request
 import requests
 
 app = Flask(__name__)
-# Jouw specifieke URL
-MY_PROXY_URL = "https://puter-proxy-czzt.onrender.com" 
+MY_PROXY_URL = "https://puter-proxy-czzt.onrender.com"
 TARGET_URL = "https://js.puter.com/v2"
 
 @app.route('/<path:subpath>', methods=['GET', 'POST', 'PUT', 'DELETE'])
@@ -11,29 +10,28 @@ TARGET_URL = "https://js.puter.com/v2"
 def proxy(subpath):
     url = f"{TARGET_URL}/{subpath}"
     
-    # Haal de data op
+    # Stuur het verzoek door
     resp = requests.request(
         method=request.method,
         url=url,
-        headers={key: value for (key, value) in request.headers if key != 'Host'},
+        headers={key: value for (key, value) in request.headers if key.lower() not in ['host', 'accept-encoding']},
         data=request.get_data(),
         params=request.args,
-        allow_redirects=False
+        allow_redirects=True
     )
     
-    # Content-Type check
-    content = resp.content
-    is_js = 'text/javascript' in resp.headers.get('Content-Type', '') or \
-            'application/javascript' in resp.headers.get('Content-Type', '')
-            
-    # URL's in de JS code vervangen zodat ze via jouw proxy blijven lopen
-    if is_js:
-        text_content = resp.text.replace(TARGET_URL, MY_PROXY_URL)
-        content = text_content.encode('utf-8')
+    # We gebruiken resp.text om automatisch te decomprimeren
+    content = resp.text
+    
+    # Vervang de URL's als het JavaScript is
+    if 'javascript' in resp.headers.get('Content-Type', '').lower():
+        content = content.replace(TARGET_URL, MY_PROXY_URL)
 
-    # Headers opschonen
+    # Bouw headers op, maar negeer de oude encoding/length headers
     headers = {key: value for (key, value) in resp.headers.items() 
                if key.lower() not in ['content-encoding', 'content-length', 'transfer-encoding', 'connection']}
+    
+    headers['Content-Type'] = resp.headers.get('Content-Type', 'application/javascript')
     headers['Access-Control-Allow-Origin'] = '*'
     
     return Response(content, resp.status_code, headers)
